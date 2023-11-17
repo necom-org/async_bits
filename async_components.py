@@ -299,7 +299,7 @@ class ChunkedSourcePlotter:
 
         if x is not None:
             to_plot = {key:{'x':x, 'y': val} for key,val in data.items()}
-            print(to_plot)
+            #print(to_plot)
             return to_plot
         else: 
 
