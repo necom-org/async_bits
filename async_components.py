@@ -7,6 +7,7 @@ from time import sleep
 import numpy as np
 from copy import deepcopy
 import traceback
+from DPM import DockPlotManager
 
 class RepeatTimer(Timer):
     def run(self):
@@ -117,7 +118,7 @@ class ZMQSubReadChunked:
                     #return datD, len(datD[list(datD.keys())[0]]) 
                     break
 
-                while self.socket.poll(20):
+                while self.socket.poll(5):
                     #print('.', end='')
                     topic, payload= self.socket.recv().split(b' ', 1)
                     payloadD = pickle.loads(payload)
@@ -137,14 +138,14 @@ class ZMQSubReadChunked:
                     if "metaData" in payloadD:
                         self.metaData = payloadD['metaData']
 
-                    if Nread >= Nmin:
-                        break;
+                if Nread >= Nmin:
+                    break;
         except Exception as e:
             print("exception in retrieval:")
             print(e)
 
 
-        print(f"retrieved {Nread} values")
+        #print(f"retrieved {Nread} values")
         self.Nsent += Nread
         tElapsed = time.time()-self.tLast
         if tElapsed > 10:
@@ -160,6 +161,8 @@ class ZMQSubReadChunked:
 
     def close(self):
         self.socket.close()
+    def __del__(self):
+        self.close()
 
 class ZMQPubSendData:
     def __init__(self, port, topic, hwm=20):
@@ -180,6 +183,11 @@ class ZMQPubSendData:
         #self.socket.send(self.topic + b" " + pickle.dumps( {'tL': tL, 'dataL': dataL}))
         self.socket.send(self.topic + b" " + pickle.dumps( kwargs ))
 
+    def close(self):
+        self.socket.close()
+
+    def __del__(self):
+        self.close()
 class ZMQChunkedPublisher:
     """ A ZMQ sender for sending clusters of data at a time
 
@@ -221,7 +229,6 @@ class ZMQChunkedPublisher:
         datD = dict(**kwargs)
         self.socket.send(self.topic + b" " + pickle.dumps( {'datD':datD, 'metaData': self.metaData}))
    
-from DPM import DockPlotManager
 import pyqtgraph as pg
 class SimpleSourcePlotter:
     # defaultPlotKwargs {mode : 1} is to set appendMode as True. This is clunky and DPM should be changed
@@ -313,7 +320,7 @@ class ChunkedSourcePlotter:
         #This should really be handled by DPM itself, but isn't currently
         def addToPlot(data):
             for key in data:
-                print(f"adding: {key}")
+                #print(f"adding: {key}")
                 self.dpm.addData(key, data[key])
 
         self.addToPlot = addToPlot
@@ -394,8 +401,10 @@ class AsyncTransformer:
 
 if __name__ == "__main__":
 
+    import time
+    import pickle
     from numpy import random, arange
-    app = pg.mkQApp("Plotting Example")
+    #app = pg.mkQApp("Plotting Example")
     def test_ZMQ_chunked_pub():
         port = 5000
 
@@ -457,7 +466,7 @@ if __name__ == "__main__":
                     )
             sumServer.start()
 
-    from PyQt5 import QtTest
+    #from PyQt6 import QtTest
     def test_async_plotter():
         topic = "Mag"
         port = 5001
@@ -487,8 +496,14 @@ if __name__ == "__main__":
         t0 = time.time()
         sendTimer.start()
         reader = ZMQSubReadChunked(port = port, topic = topic)
+        def f():
+            ret = reader.retrieve(10)
+            if ret:
+                #print(len(ret))
+                pass
+            return ret
         plotter = ChunkedSourcePlotter(
-                inputF = lambda : reader.retrieve(20),
+                inputF = f,#lambda : reader.retrieve(20),
                 label = topic,
                 poll_interval=0.2
                 )
@@ -497,7 +512,7 @@ if __name__ == "__main__":
             #plotter.update()
             #time.sleep(.5)
             #QtTest.QTest.qWait(300)
-        return plotter
+        return plotter,reader
     def test_async_plotter2():
 
         topic = "Mag"
@@ -523,7 +538,6 @@ if __name__ == "__main__":
 
 
 
-        from DPM import DockPlotManager
         dpm = DockPlotManager(f"{topic} Plot", defaultPlotKwargs = dict(mode = 1))
         #This should really be handled by DPM itself, but isn't currently
         def addToDPM(recieved):
