@@ -82,18 +82,18 @@ class ZMQSubReadChunked:
 
     Maaaybe should check timstamps for continuity to be sure comms are ok
 
-    Note 1: Most code here currently is about sticking data into this dict-of-lists structure. To get the required 
-    number of data points, we end up doing quite a lot of blocking. 
-        Maybe much of this code could be replaced by a accumulating daemon, which retrieves the data when it's 
+    Note 1: Most code here currently is about sticking data into this dict-of-lists structure. To get the required
+    number of data points, we end up doing quite a lot of blocking.
+        Maybe much of this code could be replaced by a accumulating daemon, which retrieves the data when it's
     available and sticks it on a queue. The "retrieve" method would then return immediately if sufficient data isn't available.
 
     """
-    
+
     def __init__(self, port, topic, metaData = {}, hwm=20):
         self.Nsent = 0
         self.port = port
         self.topic = topic
-        
+
         self.socket = zmq.Context().socket(zmq.SUB)
         self.socket.set_hwm(hwm)
         self.socket.connect("tcp://localhost:%s" % self.port)
@@ -109,13 +109,13 @@ class ZMQSubReadChunked:
         self.leftover_datD = {}
         k = 0
         bStop = False
-        try: 
+        try:
             Nread = len(datD[list(datD.keys())[0]]) if datD else 0
             while not bStop:
                 k+=1
                 if k > 30:
                     #print(f"too many fails, returning: {datD}")
-                    #return datD, len(datD[list(datD.keys())[0]]) 
+                    #return datD, len(datD[list(datD.keys())[0]])
                     break
 
                 while self.socket.poll(5):
@@ -125,8 +125,8 @@ class ZMQSubReadChunked:
                     #print(payloadD.keys())
 
                     appendedD = appendListsInDict(datD, payloadD['datD'])
-                    if appendedD is None: 
-                        # there was a mismatch between new and prev dicts, 
+                    if appendedD is None:
+                        # there was a mismatch between new and prev dicts,
                         # dump the old one and start again
                         self.leftover_datD = {key:list(val) for key, val in payloadD['datD'].items()}
                         bStop = True
@@ -134,7 +134,7 @@ class ZMQSubReadChunked:
 
                     datD = appendedD
                     # Will assume they're all the same lenght for now
-                    Nread = len(datD[list(datD.keys())[0]]) 
+                    Nread = len(datD[list(datD.keys())[0]])
                     if "metaData" in payloadD:
                         self.metaData = payloadD['metaData']
 
@@ -159,6 +159,13 @@ class ZMQSubReadChunked:
         else:
             return None
 
+    def clear_waiting(self):
+        n_cleared = 0
+        while self.socket.poll(1):
+            self.socket.recv()
+            n_cleared += 1
+        return n_cleared
+
     def close(self):
         self.socket.close()
     def __del__(self):
@@ -176,7 +183,7 @@ class ZMQPubSendData:
         self.socket = zmq.Context().socket(zmq.PUB)
         self.socket.set_hwm(hwm)
 
-        self.socket.bind("tcp://*:%s" % self.port) 
+        self.socket.bind("tcp://*:%s" % self.port)
         #self.socket.connect("tcp://localhost:%s" % self.port)
 
     def send(self, **kwargs):#tL, dataL):
@@ -204,8 +211,8 @@ class ZMQChunkedPublisher:
         * metaData = {}
         )
         * Objects are expected to be lists
-            
-        
+
+
     """
     def __init__(self, port, topic, metaData={}, hwm=20):
         self.metaData = metaData
@@ -219,7 +226,7 @@ class ZMQChunkedPublisher:
         self.socket = zmq.Context().socket(zmq.PUB)
         self.socket.set_hwm(hwm)
 
-        self.socket.bind("tcp://*:%s" % self.port) 
+        self.socket.bind("tcp://*:%s" % self.port)
         #self.socket.connect("tcp://localhost:%s" % self.port)
 
     def setMetaData(self, metaData):
@@ -228,7 +235,7 @@ class ZMQChunkedPublisher:
     def send(self, **kwargs):
         datD = dict(**kwargs)
         self.socket.send(self.topic + b" " + pickle.dumps( {'datD':datD, 'metaData': self.metaData}))
-   
+
 import pyqtgraph as pg
 class SimpleSourcePlotter:
     # defaultPlotKwargs {mode : 1} is to set appendMode as True. This is clunky and DPM should be changed
@@ -246,7 +253,7 @@ class SimpleSourcePlotter:
 
         if x is not None:
             return {key:{'x':x, 'y': val} for key,val in data.items()}
-        else: 
+        else:
 
             return data
 
@@ -262,7 +269,7 @@ class SimpleSourcePlotter:
 
         self.addToPlot = addToPlot
         self.poll_interval = poll_interval
-    
+
     def update(self):
         try:
             new_data = self.inputF();
@@ -308,7 +315,7 @@ class ChunkedSourcePlotter:
             to_plot = {key:{'x':x, 'y': val} for key,val in data.items()}
             #print(to_plot)
             return to_plot
-        else: 
+        else:
 
             return data
 
@@ -325,7 +332,7 @@ class ChunkedSourcePlotter:
 
         self.addToPlot = addToPlot
         self.poll_interval = poll_interval
-    
+
     def update(self):
         try:
             new_data = self.inputF();
@@ -419,15 +426,15 @@ if __name__ == "__main__":
             tNow += Nsamps
             sleep(Nsamps*dt)
             print(f"generated now: {tNow}, {Nsamps} samples")
-            return {'tL': list(tA.astype("i4")), 'y1': list(y1.astype("i4")), "y2":list(y2.astype('i4'))} 
+            return {'tL': list(tA.astype("i4")), 'y1': list(y1.astype("i4")), "y2":list(y2.astype('i4'))}
 
         sender = ZMQChunkedPublisher(port, topic="mag")
-        reader = ZMQSubReadChunked(port, topic="mag") 
+        reader = ZMQSubReadChunked(port, topic="mag")
 
         sendTimer = RepeatTimer(0.1, lambda: sender.send(**generate_data()) )
         sendTimer.start()
         tStart = time.time()
-        while time.time()-tStart < 15: 
+        while time.time()-tStart < 15:
             datD, Nread = reader.retrieve(20)
             if Nread>0:
                 print(f"Nread: {Nread}, tNow: {time.time()}")
@@ -444,7 +451,7 @@ if __name__ == "__main__":
             tNow += Ntraces
             print(f'sending... {len(t), len(y)}')
             return t, y
-        sender = ZMQPubSendData(5999, topic ="raw")  
+        sender = ZMQPubSendData(5999, topic ="raw")
 
 
         if 1:
@@ -458,7 +465,7 @@ if __name__ == "__main__":
             def sumAll(args):
                 t, data = args
                 return t, data.sum(axis=-1)
-            sumServer = AsyncTransformer( 
+            sumServer = AsyncTransformer(
                     inputF = ZMQSubReadData(port = 5999, topic = "raw").retrieve,
                     transformF = sumAll,
                     outputF = lambda args: ZMQPubSendData(6000, "summed").send(*args),
@@ -473,7 +480,7 @@ if __name__ == "__main__":
         tNow = 0
         dt = 0.1
         def generate_dict_data(): # Generate some data to plot
-            try: 
+            try:
                 nonlocal tNow
                 tElapsed = time.time() - tNow - t0
                 Nsamps = int(tElapsed/dt)
@@ -484,7 +491,7 @@ if __name__ == "__main__":
                 #Nsamps = int(5 + 5*(np.random.uniform()**2))
                 sleep((5 + 5*(np.random.uniform()**2))*dt)
                 print(f"generated now: {tNow}, {Nsamps} samples")
-                return {'t': list(tA.astype("f4")), 'y1': list(y1.astype("f4")), "y2":list(y2.astype('f4'))} 
+                return {'t': list(tA.astype("f4")), 'y1': list(y1.astype("f4")), "y2":list(y2.astype('f4'))}
             except Exception as e:
                 print("exception in generattion")
                 track = traceback.format_exc()
@@ -529,7 +536,7 @@ if __name__ == "__main__":
             tNow += Nsamps
             sleep(Nsamps*dt)
             print(f"generated now: {tNow}, {Nsamps} samples")
-            return {'tL': list(tA.astype("i4")), 'y1': list(y1.astype("i4")), "y2":list(y2.astype('i4'))} 
+            return {'tL': list(tA.astype("i4")), 'y1': list(y1.astype("i4")), "y2":list(y2.astype('i4'))}
 
         sender = ZMQChunkedPublisher(port, topic=topic)
         sendTimer = RepeatTimer(0.1, lambda: sender.send(**generate_dict_data()) )
@@ -551,7 +558,7 @@ if __name__ == "__main__":
 
 
 
-        sumServer = AsyncTransformer( 
+        sumServer = AsyncTransformer(
                 inputF = ZMQSubReadChunked(port = port, topic = topic).retrieve,
                 transformF = lambda args: addToDPM(args),
                 outputF = lambda *_: None,
@@ -561,7 +568,3 @@ if __name__ == "__main__":
 
     #test_ZMQ_chunked_pub()
     plotter = test_async_plotter()
-
-
-
-
