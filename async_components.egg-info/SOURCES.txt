@@ -1,6 +1,0 @@
-async_components.py
-setup.py
-async_components.egg-info/PKG-INFO
-async_components.egg-info/SOURCES.txt
-async_components.egg-info/dependency_links.txt
-async_components.egg-info/top_level.txt
